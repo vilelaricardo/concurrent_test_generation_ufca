@@ -1,0 +1,13 @@
+// System under testing settings
+			File filesPath = new File("./benchmark/message_passing-shared_memory/004_token_ring_broadcast");
+			ProcessBuilder instrumentation = new ProcessBuilder("valipar", "inst", "-p", "TokenRingMaster", "-p",
+					"TokenRingSlave", "-p", "TokenRingSlave", "-f", "Buffer.class", "Producer.class",
+					"TokenRingMaster.class", "TokenRingSlave.class", "-i", "HelperClass.class");
+
+						String[] testSetup = { "valipar", "testcase", "--new", 
+								"-p", "1", "TokenRingSlave", "1 TESTDATA 3",
+								"-p", "2", "TokenRingSlave", "2 TESTDATA 3",
+								"-p", "0", "TokenRingMaster", "TESTDATA 3",}; 
+								
+								
+								//Chromossome size:  2

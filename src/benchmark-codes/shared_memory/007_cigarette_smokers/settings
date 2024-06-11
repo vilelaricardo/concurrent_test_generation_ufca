@@ -1,0 +1,12 @@
+
+	//System under testing settings
+			File filesPath = new File("./benchmark/shared_memory/007_cigarette_smokers");
+			ProcessBuilder instrumentation = new ProcessBuilder("valipar", "inst", "-t", "-l", "-p", "Main", "-f",
+					"Main.class", "Controller.class", "SharedObject.class", "Smoker_With_Match.class",
+					"Smoker_With_Paper.class", "Smoker_With_Tobacco.class");
+
+						String[] testSetup = { "valipar", "testcase", "--new", 
+								"-p", "0", "Main", "TESTDATA"}; 
+								
+								
+								//Chromossome size: 2

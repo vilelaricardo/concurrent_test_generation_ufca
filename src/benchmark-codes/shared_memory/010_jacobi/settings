@@ -1,0 +1,10 @@
+// System under testing settings
+			File filesPath = new File("./benchmark/shared_memory/010_jacobi");
+			ProcessBuilder instrumentation = new ProcessBuilder("valipar", "inst", "-t", "-l", "-p", "Master", "-f",
+					"Master.class","SharedVariables.class", "Slave.class");
+
+						String[] testSetup = { "valipar", "testcase", "--new", 
+								"-p", "0", "Master", "2 TESTDATA"}; 
+								
+								
+								//Chromossome: 2

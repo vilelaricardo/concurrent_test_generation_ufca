@@ -1,0 +1,12 @@
+// System under testing settings
+			File filesPath = new File("./benchmark/message_passing/006_parallel_gcd_two_slaves");
+			ProcessBuilder instrumentation = new ProcessBuilder("valipar", "inst", "-t", "-l", "-p", "GcdMaster",
+					"GcdSlave", "GcdSlave", "-f", "GcdMaster.class", "GcdSlave.class", "-i", "HelperClass.class");
+
+			String[] testSetup = { "valipar", "testcase", "--new", 
+					"-p", "0", "GcdMaster", "TESTDATA", 
+					"-p", "1", "GcdSlave", "1",
+					"-p", "2", "GcdSlave", "2"};
+
+
+	//Chromossome size: 3

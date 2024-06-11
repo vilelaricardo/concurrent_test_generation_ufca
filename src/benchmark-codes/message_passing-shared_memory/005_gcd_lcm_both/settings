@@ -1,0 +1,15 @@
+// System under testing settings
+			File filesPath = new File("./benchmark/message_passing-shared_memory/005_gcd_lcm_both");
+			ProcessBuilder instrumentation = new ProcessBuilder("valipar", "inst", "-t", "-l", "-p", "GcdLcmSlave",
+					"GcdLcmSlave", "GcdLcmSlave", "GcdLcmMaster", "-f", "GcdLcmSlave.class", "GcdLcmMaster.class",
+					"GcdThread.class", "LcmThread.class", "-i", "HelperClass.class", "Buffer.class");
+
+						String[] testSetup = { "valipar", "testcase", "--new", 
+								"-p", "0", "GcdLcmSlave", "1",
+								"-p", "1", "GcdLcmSlave", "2",
+								"-p", "2", "GcdLcmSlave", "3",
+								"-p", "3", "GcdLcmMaster", "TESTDATA",}; 
+								
+								
+								//Chromossome size: 4
+								//Range: 0-100 or 0-1000

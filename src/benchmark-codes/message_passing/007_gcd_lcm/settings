@@ -1,0 +1,14 @@
+// System under testing settings
+			File filesPath = new File("./benchmark/message_passing/007_gcd_lcm");
+			ProcessBuilder instrumentation = new ProcessBuilder("valipar", "inst", "-t", "-l", "-p", "GcdLcmSlave",
+					"GcdLcmSlave", "GcdLcmSlave", "GcdLcmMaster", "-f", "GcdLcmSlave.class", "GcdLcmMaster.class", "-i",
+					"HelperClass.class");
+
+			String[] testSetup = { "valipar", "testcase", "--new", 
+					"-p", "0", "GcdLcmSlave", "1", 
+					"-p", "1", "GcdLcmSlave", "2",
+					"-p", "2", "GcdLcmSlave", "3",
+					"-p", "3", "GcdLcmMaster", "TESTDATA" };
+					
+					
+					//Chromossome size: 4

@@ -1,0 +1,13 @@
+// System under testing settings
+			File filesPath = new File("./benchmark/message_passing/011_parallel_sieve_of_eratosthenes");
+			ProcessBuilder instrumentation = new ProcessBuilder("valipar", "inst", "-t", "-l", "-p", "Slave", "Slave",
+					"Slave", "Master", "-f", "Slave.class", "Master.class", "-i", "HelperClass.class");
+
+			String[] testSetup = { "valipar", "testcase", "--new",
+					"-p", "0", "Slave", "1 4 TESTDATA",
+					"-p", "1", "Slave", "2 4 TESTDATA",
+					"-p", "2", "Slave", "3 4 TESTDATA",
+					"-p", "3", "Master", "0 4 TESTDATA"};
+					
+					
+					//Size of Chromossome: 1

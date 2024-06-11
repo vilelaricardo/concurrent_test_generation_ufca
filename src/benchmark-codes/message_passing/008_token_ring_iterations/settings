@@ -1,0 +1,14 @@
+// System under testing settings
+			File filesPath = new File("./benchmark/message_passing/008_token_ring_iterations");
+			ProcessBuilder instrumentation = new ProcessBuilder("valipar", "inst", "-t", "-l", "-p", "TokenRingMaster",
+					"TokenRingSlave", "TokenRingSlave", "TokenRingSlave", "-f", "TokenRingMaster.class",
+					"TokenRingSlave.class", "-i", "HelperClass.class");
+
+			String[] testSetup = { "valipar", "testcase", "--new", 
+					"-p", "0", "TokenRingMaster", "0 TESTDATA 4", 
+					"-p", "1", "TokenRingSlave", "1 TESTDATA 4",
+					"-p", "2", "TokenRingSlave", "2 TESTDATA 4",
+					"-p", "3", "TokenRingSlave", "3 TESTDATA 4" };
+					
+					
+					//Size of chromossome: 3
