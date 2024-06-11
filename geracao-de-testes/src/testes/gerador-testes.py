@@ -33,7 +33,7 @@ def gerar_analise(codigo):
             """
         }, {
             "role": "user",
-            "content": f"Aqui está o código do Benchmark:\n\n{codigo}\n\nGere uma análise dos testes usando o critério de teste All-sync-edges."
+            "content": f"Aqui está o código do Benchmark:\n\n{codigo}\n\nCreate the test set comprising 10 test data points while adhering to the all-sync-edges criterion. Format each test data point as follows: Test Data 1: [1, 2, 3], where each array position corresponds to an input argument."
         }]
     )
 
