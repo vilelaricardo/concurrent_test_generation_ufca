@@ -1,0 +1,11 @@
+// System under testing settings
+			File filesPath = new File("./benchmark/shared_memory/004_producer_consumer_semaphore_lock_condition_iterations");
+			ProcessBuilder instrumentation = new ProcessBuilder("valipar", "inst", "-t", "-l", "-p", "Main", "-f",
+					"Main.class", "Buffer_Semaphore.class", "Buffer_With_Lock_Condition.class", "Consumer.class",
+					"Producer.class");
+
+						String[] testSetup = { "valipar", "testcase", "--new", 
+								"-p", "0", "Main", "4 TESTDATA 10 TESTDATA"}; 
+								
+								
+								//Chromossome size: 1

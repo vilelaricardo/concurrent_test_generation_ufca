@@ -1,0 +1,9 @@
+// System under testing settings
+						File filesPath = new File("./benchmark/shared_memory/009_matrix");
+						ProcessBuilder instrumentation = new ProcessBuilder("valipar", "inst", "-p", "Matrix",  "-f", "Matrix.class", "FirstSlave.class",
+								"SecondSlave.class");
+
+									String[] testSetup = { "valipar", "testcase", "--new", 
+											"-p", "0", "Matrix", "2 TESTDATA"}; 
+                                            
+                                            //Chromossome size: 1
