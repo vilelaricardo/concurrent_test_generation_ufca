@@ -1,0 +1,284 @@
+import java.net.*;
+import java.io.*;
+
+public class TokenRingMaster {
+    public static void main(String args[]) throws Exception {
+        int amountOfProcess = 0;
+        int processId = 0;
+        int operation = 0; // 0 or 1 => 0 increment, 1 multiplies
+        int direction = 0; // 0 or 1 => 0 clockwise, 1 counterclockwise
+        int bothDirections = 2;
+        int token = 2;
+        FileReader file = null;
+        String data = "";
+
+
+            processId = Integer.parseInt(args[0]); //FIXO 0 MESTRE
+            operation = Integer.parseInt(args[1]); // 0 ou 1
+            direction = Integer.parseInt(args[2]); // 0 ou 1
+            amountOfProcess = Integer.parseInt(args[3]); // 3+
+
+if((operation==0 || operation==1)){
+	if((direction==0 || direction==1)){
+
+       // create socket
+        DatagramSocket socket = new DatagramSocket();
+        int port = socket.getLocalPort();
+        InetAddress addressIP = InetAddress.getLocalHost();
+        String ip = addressIP.getHostAddress();
+
+        // multicast socket
+        InetAddress group = InetAddress.getByName("228.5.6.7");
+        MulticastSocket multicastSocket = new MulticastSocket(6789);
+        multicastSocket.joinGroup(group);
+
+        // make address file with IP:PORT
+        String address = HelperClass.makeAddress(ip, port);
+        HelperClass.makeAddressFile(processId, address);
+
+        // identification of the clockwise and counterclockwise neighbors
+        int clockwiseAddress = HelperClass.getClockwiseNeighbor(processId, amountOfProcess);
+        int counterclockwiseAddress = HelperClass.getCounterclockwiseNeighbor(processId, amountOfProcess);
+
+        // wait neighbors
+        HelperClass.waitNeighbors(clockwiseAddress, counterclockwiseAddress);
+
+        if (direction == 0) {
+            file = new FileReader("token_ring_" + clockwiseAddress + ".txt"); 
+        } else{
+            file = new FileReader("token_ring_" + counterclockwiseAddress + ".txt");
+        }    
+
+        // get remote IP and PORT of the neighbor
+        String hostIP = HelperClass.readNeighborIP(file);
+        InetAddress remoteIP = InetAddress.getByName(hostIP);
+        int remotePort = HelperClass.readNeighborPort(file, direction, clockwiseAddress, counterclockwiseAddress);
+
+        byte[] sendBuffer;
+        byte[] receiveBuffer;
+
+        while (bothDirections != 0) {
+            sendBuffer = new byte[255];
+            String dataString = Integer.toString(token);
+            sendBuffer = dataString.getBytes();
+            DatagramPacket datagram = new DatagramPacket(sendBuffer, sendBuffer.length, remoteIP, remotePort);
+
+            if (direction == 0 && bothDirections == 2) {
+                socket.send(datagram);
+            }
+            if (direction == 1 && bothDirections == 2) {
+                socket.send(datagram);
+            }
+            if (direction == 0 && bothDirections == 1) {
+                socket.send(datagram);
+            }
+            if (direction == 1 && bothDirections == 1) {
+                socket.send(datagram);
+            }
+
+            receiveBuffer = new byte[255];
+            DatagramPacket receivePacket = new DatagramPacket(receiveBuffer, receiveBuffer.length);
+            socket.receive(receivePacket);
+            data = new String(receivePacket.getData());
+
+            token = (Integer.parseInt(data.trim()));
+
+            if (operation == 0) {
+                token++;
+            }
+            if (operation == 1) {
+                token = token * 2;
+            }
+
+            bothDirections--;
+        }
+
+        String msg = Integer.toString(token);
+        DatagramPacket multicastMsg = new DatagramPacket(msg.getBytes(), msg.length(), group, 6789);
+        multicastSocket.send(multicastMsg);
+
+        HelperClass.closeFiles(amountOfProcess, file);
+        System.out.println("Result = " + token);
+   
+    }}}
+}
+
+import java.net.*;
+import java.io.*;
+import java.nio.file.*;
+
+public class TokenRingSlave {
+    public static void main(String args[]) throws Exception {
+        int amountOfProcess = 0;
+        int processId = 0;
+        int operation = 0; // 0 or 1 => 0 increment, 1 multiplies
+        int direction = 0; // 0 or 1 => 0 clockwise, 1 counterclockwise
+        int bothDirections = 2;
+        FileReader file = null;
+        int token;
+        String data;
+
+
+            processId = Integer.parseInt(args[0]);
+            operation = Integer.parseInt(args[1]);
+            direction = Integer.parseInt(args[2]);
+            amountOfProcess = Integer.parseInt(args[3]);
+
+if((operation==0 || operation==1)){
+	if((direction==0 || direction==1)){
+
+       // create socket
+        DatagramSocket socket = new DatagramSocket();
+        int port = socket.getLocalPort();
+        InetAddress addressIP = InetAddress.getLocalHost();
+        String ip = addressIP.getHostAddress();
+
+        // multicast socket
+        InetAddress group = InetAddress.getByName("228.5.6.7");
+        MulticastSocket multicastSocket = new MulticastSocket(6789);
+        multicastSocket.joinGroup(group);
+
+        // make address file with IP:PORT
+        String address = HelperClass.makeAddress(ip, port);
+        HelperClass.makeAddressFile(processId, address);
+
+        Path fp = Paths.get("slave" + processId);
+        Files.createFile(fp);
+
+        // identification of the clockwise and counterclockwise neighbors
+        int clockwiseAddress = HelperClass.getClockwiseNeighbor(processId, amountOfProcess);
+        int counterclockwiseAddress = HelperClass.getCounterclockwiseNeighbor(processId, amountOfProcess);
+
+        // wait neighbors
+        HelperClass.waitNeighbors(clockwiseAddress, counterclockwiseAddress);
+
+        if (direction == 0) {
+            file = new FileReader("token_ring_" + clockwiseAddress + ".txt"); 
+        } else{
+            file = new FileReader("token_ring_" + counterclockwiseAddress + ".txt");
+        }    
+
+        // get remote IP and PORT of the neighbor
+        String hostIP = HelperClass.readNeighborIP(file);
+        InetAddress remoteIP = InetAddress.getByName(hostIP);
+        int remotePort = HelperClass.readNeighborPort(file, direction, clockwiseAddress, counterclockwiseAddress);
+
+        byte[] receiveBuffer;
+        byte[] sendBuffer;
+
+        while (bothDirections != 0) {
+            receiveBuffer = new byte[255];
+            DatagramPacket receivePacket = new DatagramPacket(receiveBuffer, receiveBuffer.length);
+            socket.receive(receivePacket);            
+            data = new String(receivePacket.getData());
+            token = (Integer.parseInt(data.trim()));
+
+            if (operation == 0) {
+                token++;
+            }
+            if (operation == 1) {
+                token = token * 2;
+            }
+
+            String dataString = Integer.toString(token);
+            sendBuffer = new byte[255];
+            sendBuffer = dataString.getBytes();
+            DatagramPacket datagram = new DatagramPacket(sendBuffer, sendBuffer.length, remoteIP, remotePort);
+
+            if (direction == 0 && bothDirections == 2) {
+                socket.send(datagram);
+            }
+            if (direction == 1 && bothDirections == 2) {
+                socket.send(datagram);
+            }
+            if (direction == 0 && bothDirections == 1) {
+                socket.send(datagram);
+            }
+            if (direction == 1 && bothDirections == 1) {
+                socket.send(datagram);
+            }
+
+            bothDirections--;
+        }
+
+        byte[] buf = new byte[255];
+        DatagramPacket recv = new DatagramPacket(buf, buf.length);
+        multicastSocket.receive(recv);
+        System.out.println("Multicast result = " + new String(recv.getData()));
+
+        Files.deleteIfExists(fp);
+    }}}
+}
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+
+public class HelperClass {
+	private static BufferedReader br;
+	private static BufferedReader br2;
+	
+	public static String makeAddress(String ip, int port) {
+        StringBuilder builder = new StringBuilder();
+        builder.append(ip).append(":").append(port);
+        String address = builder.toString();
+        return address;
+    }
+    
+	public static void makeAddressFile(int processId, String address) throws IOException {
+        FileWriter ownFile = new FileWriter("token_ring_" + processId + ".txt");
+        PrintWriter writeFile = new PrintWriter(ownFile);
+        writeFile.printf(address);
+        ownFile.close();
+    }
+    
+	public static int getClockwiseNeighbor(int processId, int amountOfProcess) {
+        int clockwiseAddress = (processId + amountOfProcess + 1) % amountOfProcess;
+        return clockwiseAddress;
+    }
+    
+	public static int getCounterclockwiseNeighbor(int processId, int amountOfProcess) {
+        int counterclockwiseAddress = (processId + amountOfProcess - 1) % amountOfProcess;
+        return counterclockwiseAddress;
+    }
+ 
+	public static void waitNeighbors(int clockwiseAddress, int counterclockwiseAddress) {
+        while (!Files.exists(Paths.get("token_ring_" + clockwiseAddress + ".txt")));
+        while (!Files.exists(Paths.get("token_ring_" + counterclockwiseAddress + ".txt")));
+    }
+    
+    public static String readNeighborIP(FileReader file) throws IOException {
+        br = new BufferedReader(file); 
+        String fileContent; 
+        while((fileContent = br.readLine()) == null) {}
+        String[] result = new String(fileContent).split(":");
+        String hostIP  = result[0]; 
+        return hostIP;        
+    }
+    
+	public static int readNeighborPort(FileReader file, int direction, int clockwiseAddress, int counterclockwiseAddress) throws IOException {
+        if (direction == 0) {
+            file = new FileReader("token_ring_" + clockwiseAddress + ".txt"); 
+        } else if (direction == 1) {
+            file = new FileReader("token_ring_" + counterclockwiseAddress + ".txt");
+        }  
+        br2 = new BufferedReader(file); 
+        String fileContent; 
+        while((fileContent = br2.readLine()) == null) {}
+        String[] result = new String(fileContent).split(":");
+        int remotePort = Integer.parseInt(result[1]);
+        return remotePort;
+    }
+    
+	public static void closeFiles(int amountOfProcess, FileReader file) throws IOException {
+		new File("token_ring_0.txt").delete();
+        for (int i = 0; i < amountOfProcess; i++) {
+            new File("token_ring_" + i + ".txt").delete();
+        } 
+    }
+}
