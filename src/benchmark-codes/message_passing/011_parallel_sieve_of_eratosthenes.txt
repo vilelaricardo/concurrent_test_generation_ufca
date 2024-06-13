@@ -1,0 +1,350 @@
+import java.io.*;
+import java.net.*;
+import java.util.*;
+
+public class Master {
+    public static void main(String[] args) throws IOException {
+        final int FINISH = -1;
+        int processId = 0;
+        int numberOfProcesses = 0;
+        int range = 0; // the limit is 10000
+        int currentPrime = 2;
+        int size = 0;
+        int remainder = 0;
+        List<Integer> primes = new ArrayList<>();
+        String out = "";
+
+            processId = Integer.parseInt(args[0]); // FIXO 0 MESTRE
+            numberOfProcesses = Integer.parseInt(args[1]); // NO MIN 2 
+            range = Integer.parseInt(args[2]); // QUALQUER VALOR POSITIVO < 10000
+  if((range>=20 && range<=10000)){
+
+        // create socket
+        DatagramSocket socket = new DatagramSocket();
+        int port = socket.getLocalPort();
+        InetAddress addressIP = InetAddress.getLocalHost();
+        String ip = addressIP.getHostAddress();
+
+        // make address file with IP:PORT
+        String address = HelperClass.makeAddress(ip, port);
+        HelperClass.makeAddressFile(0, address);
+
+        // wait slaves
+        HelperClass.waitSlaves(numberOfProcesses - 1);
+
+        remainder = range % numberOfProcesses;
+        size = range / numberOfProcesses;
+
+        if (remainder != 0) {
+            size = size + 1;
+        }
+
+        int array[] = new int[size];
+
+        // initializing all numbers as unmarked (represented by zero)
+        for (int i = 0; i < size; i++) {
+            array[i] = 0;
+        }
+
+        // set multicast address
+        InetAddress group = InetAddress.getByName("228.5.6.7");
+        MulticastSocket socketBroadcast = new MulticastSocket(6789);
+        socketBroadcast.joinGroup(group);
+
+        // sending the current prime to the others processes
+        for (int i = currentPrime; i < Math.sqrt(range); i++) {
+            if (array[i] == 0) {
+                DatagramPacket broadcastResult = new DatagramPacket(Integer.toString(i).getBytes(), Integer.toString(i).length(), group, 6789);
+                socketBroadcast.send(broadcastResult);
+
+                // marking the numbers that are multiples of the current prime
+                for (int j = i * i; j < size; j += i) {
+                    array[j] = 1;
+                }
+            }
+        }
+
+        DatagramPacket broadcastResult = new DatagramPacket(Integer.toString(FINISH).getBytes(), Integer.toString(FINISH).length(), group, 6789);
+
+        // sending the value -1 to finish iterations of slaves
+        socketBroadcast.send(broadcastResult);
+
+        // checking the amount of primes in the master process
+        for (int i = 2; i < size; i++) {
+            if (array[i] == 0) {
+                primes.add(i);
+            }
+        }
+
+        byte[] sendBuffer = new byte[4048];
+        byte[] receiveBuffer = new byte[4048];
+        DatagramPacket receivePacket = new DatagramPacket(receiveBuffer, receiveBuffer.length);
+
+        int loop = 0;
+        int iteration = 1;
+
+        // reduce
+        while (loop != 1) {
+            socket.receive(receivePacket);
+            String[] result = new String(receivePacket.getData()).trim().split(" ");
+
+            for (int j = 0; j < result.length; j++) {
+                primes.add(Integer.parseInt(result[j].trim()));
+            }
+
+            iteration = iteration * 2;
+            loop = numberOfProcesses / iteration + (numberOfProcesses % iteration > 0 ? 1 : 0);
+        }
+
+        // sort the array
+        Collections.sort(primes);
+
+        System.out.print("\n******** ALL PRIMES *******\n");
+        for (int k = 0; k < primes.size(); k++) {
+            if (k % 10 == 0) {
+                System.out.println();
+            }
+            System.out.print(" " + primes.get(k));
+        }
+        System.out.println();
+        HelperClass.closeFiles(numberOfProcesses);
+    }}
+}
+import java.io.*;
+import java.net.*;
+import java.nio.file.*;
+
+public class Slave {
+    public static void main(String[] args) throws IOException {
+        int range = 0; // the limit is 10000
+        int numberOfProcesses = 0;
+        int processId = 0;
+        int size = 0;
+        int lowValue = 0;
+        int highValue = 0;
+        int index = 0;
+
+
+            processId = Integer.parseInt(args[0]);
+            numberOfProcesses = Integer.parseInt(args[1]);
+            range = Integer.parseInt(args[2]);
+
+if((range>=20 && range<=10000)){
+   
+        // create socket
+        DatagramSocket socket = new DatagramSocket();
+        InetAddress addressIP = InetAddress.getLocalHost();
+        String ip = addressIP.getHostAddress();
+        int port = socket.getLocalPort();
+
+        // make address file with IP:PORT
+        String address = HelperClass.makeAddress(ip, port);
+        HelperClass.makeAddressFile(processId, address);
+
+        Path fp = Paths.get("slave" + processId);
+        Files.createFile(fp);
+
+        // wait master
+        HelperClass.waitMaster();
+
+        int remainder = range % numberOfProcesses;
+        size = range / numberOfProcesses;
+
+        // set lowValue, highValue and size
+        if (remainder != 0) {
+            if (remainder > processId) {
+                lowValue = processId;
+                highValue = (processId + processId) + 1;
+                size = size + 1;
+            } else {
+                lowValue = remainder;
+                highValue = remainder + processId;
+            }
+        }
+
+        int array[] = new int[size];
+
+        if (remainder == 0) {
+            highValue = processId;
+        }
+
+        lowValue = (processId * size) + lowValue;
+        highValue = ((processId + 1) * (size - 1)) + highValue;
+
+        // create multicast socket
+        InetAddress group = InetAddress.getByName("228.5.6.7");
+        MulticastSocket socketBroadcast = new MulticastSocket(6789);
+        socketBroadcast.joinGroup(group);
+
+        byte[] buf = new byte[4048];
+        DatagramPacket recv = new DatagramPacket(buf, buf.length);
+
+        int count = 0;
+        int currentPrime = 0;
+        StringBuilder builder = new StringBuilder();
+        String out = "";
+
+        System.out.print("\n******** PRIMES *******\n");
+
+        while (currentPrime != -1) {
+            // receive currentPrime
+            socketBroadcast.receive(recv);
+            String data = new String(recv.getData());
+            currentPrime = (Integer.parseInt(data.trim()));
+            if (currentPrime == -1) {
+                for (int i = 0; i < size; i++) {
+                    if (array[i] == 0) {
+                        if (count % 10 == 0) {
+                            System.out.println();
+                        }
+                        System.out.print((i + lowValue) + " ");
+                        out = HelperClass.makeMessagePrimes(builder, (i + lowValue));
+                        // primes.add(i);
+                        count++;
+                    }
+                }
+                System.out.println();
+                break;
+            } else {
+                for (int j = 0; j < size; j++) {
+                    if ((j + lowValue) % currentPrime == 0) {
+                        index = j;
+                        break;
+                    }
+                }
+
+                // exclude the others multiples of this currentPrime
+                for (int y = index; y < size; y += currentPrime) {
+                    array[y] = 1;
+                }
+            }
+        }
+
+        byte[] sendBuffer = new byte[4048];
+        byte[] receiveBuffer = new byte[4048];
+        DatagramPacket receivePacket = new DatagramPacket(receiveBuffer, receiveBuffer.length);
+
+        int x = 0;
+        int loop = 0;
+        int iteration = 1;
+
+        // reduce
+        while (loop != 1) {
+            boolean isLast = HelperClass.thisProcessIsLast(processId, iteration, numberOfProcesses);
+            int value = processId / iteration + (processId % iteration > 0 ? 1 : 0);
+
+            if (value % 2 == 0 && !isLast) { // receive data of other slave
+                socket.receive(receivePacket);
+                String[] result = new String(receivePacket.getData()).trim().split(" ");
+
+                for (int j = 0; j < result.length; j++) {
+                    x = Integer.parseInt(result[j].trim());
+                    out = HelperClass.makeMessagePrimes(builder, x);
+                }
+
+            } else if (value % 2 != 0) {
+                // destination to send data
+                int toSend = ((((processId / iteration) - 1) + (((processId % iteration) > 0) ? 1 : 0)) * iteration);
+
+                // get destination address
+                String hostIP = HelperClass.readRemoteIP(toSend);
+                InetAddress remoteIP = InetAddress.getByName(hostIP);
+                int remotePort = HelperClass.readRemotePort(toSend);
+
+                sendBuffer = out.getBytes();
+                DatagramPacket datagram = new DatagramPacket(sendBuffer, sendBuffer.length, remoteIP, remotePort);
+                socket.send(datagram);
+                break;
+            }
+            iteration = iteration * 2;
+            loop = numberOfProcesses / iteration + (numberOfProcesses % iteration > 0 ? 1 : 0);
+        }
+    }}
+}
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+
+public class HelperClass {
+    public static int processIndex(int processId, int iteration) {
+        int label = (processId / iteration);
+        if (processId % iteration > 0) {
+            label++;
+        }
+        return label;
+    }
+
+    public static boolean thisProcessIsLast(int processId, int iteration, int numberOfProcesses) {
+        boolean lastProcess = false;
+        int value = (numberOfProcesses / iteration + (numberOfProcesses % iteration > 0 ? 1 : 0)) - 1;
+        if (processId / iteration == value) {
+            lastProcess = true;
+        }
+        return lastProcess;
+    }
+
+    public static String makeMessagePrimes(StringBuilder builder, int value) {
+        builder.append(" ").append(value);
+        String address = builder.toString();
+        return address;
+    }
+
+    public static String makeAddress(String ip, int port) {
+        StringBuilder builder = new StringBuilder();
+        builder.append(ip).append(":").append(port);
+        String address = builder.toString();
+        return address;
+    }
+
+    public static void makeAddressFile(int processId, String address) throws IOException {
+        FileWriter ownFile = new FileWriter("parallel_sieve_" + processId + ".txt");
+        PrintWriter writeFile = new PrintWriter(ownFile);
+        writeFile.printf(address);
+        ownFile.close();
+    }
+
+    public static void waitMaster() {
+        while (!Files.exists(Paths.get("parallel_sieve_0.txt")));
+    }
+
+    public static void waitSlaves(int k) {
+        for (int i = 1; i < k; i++) {
+            while (!Files.exists(Paths.get("slave" + i)));
+        }
+    }
+
+    public static String readRemoteIP(int processId) throws IOException {
+        FileReader file = new FileReader("parallel_sieve_" + processId + ".txt");
+        BufferedReader br = new BufferedReader(file);
+        String fileContent;
+        while ((fileContent = br.readLine()) == null) {}
+        String[] remoteAddress = new String(fileContent).split(":");
+        String hostIP = remoteAddress[0];
+        file.close();
+        return hostIP;
+    }
+
+    public static int readRemotePort(int processId) throws IOException {
+        FileReader file = new FileReader("parallel_sieve_" + processId + ".txt");
+        BufferedReader br = new BufferedReader(file);
+        String fileContent;
+        while ((fileContent = br.readLine()) == null) {}
+        String[] remoteAddress = new String(fileContent).split(":");
+        int remotePort = Integer.parseInt(remoteAddress[1]);
+        file.close();
+        return remotePort;
+    }
+
+    public static void closeFiles(int numberOfProcesses) {
+        for (int i = 1; i < numberOfProcesses; i++) {
+            new File("parallel_sieve_" + i + ".txt").delete();
+            new File("slave" + i).delete();
+        }
+        new File("parallel_sieve_0.txt").delete();
+    }
+}
