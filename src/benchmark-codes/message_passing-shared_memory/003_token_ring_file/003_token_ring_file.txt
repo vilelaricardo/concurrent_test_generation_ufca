@@ -1,0 +1,327 @@
+public class Buffer {
+    private int variable;
+
+    public void setSharedObject(int shared) {
+        variable = shared;
+    }
+
+    public int getSharedObject() {
+        return variable;
+    }
+
+    public void setSharedIntIncrement() {
+        variable++;
+    }
+
+    public void setSharedIntMultiplie() {
+        variable = variable * 2;
+    }
+}
+
+import java.util.concurrent.Semaphore;
+
+public class Producer extends Thread {
+    private Buffer object;
+    private Semaphore tokenToProducer;
+    private int operation;
+
+    public void setProducer(Semaphore tokenToProducer, int operation) {
+        this.operation = operation;
+        this.tokenToProducer = tokenToProducer;
+    }
+    
+    public void setSharedObject(Buffer object) {
+        this.object = object;
+    }
+
+    public void run() {
+        if (operation == 0) {
+            tokenToProducer.acquireUninterruptibly();
+            object.setSharedIntIncrement();
+            tokenToProducer.release();
+        }
+        if (operation == 1) {
+            tokenToProducer.acquireUninterruptibly();
+            object.setSharedIntMultiplie();
+            tokenToProducer.release();
+        }
+    }
+}
+
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.util.concurrent.Semaphore;
+import java.nio.file.*;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.channels.DatagramChannel;
+import java.net.MulticastSocket;
+
+public class TokenRingMaster {
+    public static void main(String args[]) throws Exception {
+        long time = System.nanoTime();
+        int operation = 0; // 0 or 1 => 0 increment the shared variable, 1 multiplies the shared variable
+        int direction = 0; // 0 or 1 => 0 clockwise, 1 counterclockwise
+        int clockwiseSendPort = 0;
+        int counterclockwiseSendPort = 0;
+        int processAmount = 0;
+        int serverPort = 2001;
+        int sharedVariable = 2;
+        String data;
+        
+  
+            operation = Integer.parseInt(args[0]);
+            direction = Integer.parseInt(args[1]); 
+            processAmount = Integer.parseInt(args[2]);
+
+	if((operation==0) || (operation==1)){	
+  		if((direction==0) || (direction==1)){   
+        DatagramChannel channel = DatagramChannel.open();
+        channel.socket().bind(null); // automatically assigned socket address 
+        channel.configureBlocking(false);
+
+        int localPort = channel.socket().getLocalPort();
+        ValiparInitializer.publishPort(0, localPort);
+
+        ValiparInitializer.notifyClients(0);
+        
+        ValiparInitializer.waitServer(String.valueOf(1));
+        ValiparInitializer.waitServer(String.valueOf(2));
+
+        clockwiseSendPort = ValiparInitializer.getPort(1);
+        counterclockwiseSendPort = ValiparInitializer.getPort(processAmount - 1);
+
+        if (direction == 0) {
+            serverPort = clockwiseSendPort;
+        } else {
+            serverPort = counterclockwiseSendPort;
+        }
+
+        ByteBuffer buffer = ValiparInitializer.getBuffer(Integer.toString(sharedVariable).getBytes());
+
+        if (direction == 0) {
+            channel.send(buffer, new InetSocketAddress("localhost", clockwiseSendPort));
+        } else{
+            channel.send(buffer, new InetSocketAddress("localhost", counterclockwiseSendPort));
+        }
+        
+        int value = 0;
+        SocketAddress addr;
+        do {
+            buffer = ByteBuffer.allocate(128);
+            addr = channel.receive(buffer);
+            if (addr != null) {
+                buffer.flip();
+                byte[] message = new byte[buffer.remaining()];
+                buffer.get(message, 0, message.length);
+                buffer.clear();
+                String strMessage = new String(message).trim();
+                value = Integer.parseInt(strMessage);
+            }
+        } while (addr == null);
+
+		sharedVariable = value;
+
+        if (operation == 0) {
+            sharedVariable++;
+        } else if (operation == 1) {
+            sharedVariable = sharedVariable * 2;
+        }
+
+        System.out.println("\nResult = " + sharedVariable);
+        
+        double totalTime = ((double) System.nanoTime() - time) / 1_000_000_000;
+        System.out.println("Time: " + totalTime); 
+    
+        ValiparInitializer.clean();
+    }}}
+}
+
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.util.concurrent.Semaphore;
+import java.nio.file.*;
+import java.util.concurrent.CyclicBarrier;
+import java.net.MulticastSocket;
+
+public class TokenRingSlave {
+    public static void main(String args[]) throws Exception {
+        int processId = 0;
+        int operation = 0; // 0 or 1 => 0 increment the shared variable, 1 multiplies the shared variable
+        int direction = 0; // 0 or 1 => 0 clockwise, 1 counterclockwise
+        int clockwiseSendPort;
+        int counterclockwiseSendPort;
+        int processAmount = 0;
+        int serverPort = 0;
+        String data;
+        String data1;
+        
+
+            processId = Integer.parseInt(args[0]);
+            operation = Integer.parseInt(args[1]);
+            direction = Integer.parseInt(args[2]);
+            processAmount = Integer.parseInt(args[3]);
+        
+if((operation==0) || (operation==1)){	
+  		if((direction==0) || (direction==1)){   
+        
+        DatagramSocket server = new DatagramSocket(); // dynamic port binding
+        int port = server.getLocalPort();
+        ValiparInitializer.publishPort(processId, port);
+
+        ValiparInitializer.notifyClients(String.valueOf(processId));
+
+        int beforeProcess = (processId + processAmount + 1) % processAmount;
+        int afterProcess = (processId + processAmount - 1) % processAmount;
+
+        ValiparInitializer.waitServer(String.valueOf(beforeProcess));
+        ValiparInitializer.waitServer(String.valueOf(afterProcess));
+
+        clockwiseSendPort = ValiparInitializer.getPort(beforeProcess);
+        counterclockwiseSendPort = ValiparInitializer.getPort(afterProcess);
+
+        Semaphore tokenToProducer = new Semaphore(0);
+        tokenToProducer.release();
+        
+        Buffer sharedObject = new Buffer();
+
+        byte[] receiveBuffer  = new byte[255];
+        
+        DatagramPacket receivePacket = new DatagramPacket(receiveBuffer, receiveBuffer.length);
+        server.receive(receivePacket);
+        data = new String(receivePacket.getData());
+        int sharedVariable = (Integer.parseInt(data.trim()));
+        
+        sharedObject.setSharedObject(sharedVariable);
+        
+        if (operation == 0) {
+            sharedObject.setSharedIntIncrement();
+        } else{
+            sharedObject.setSharedIntMultiplie();
+        }
+        
+        Producer producer1 = new Producer();
+        producer1.setProducer(tokenToProducer, operation);
+        producer1.setSharedObject(sharedObject);
+        producer1.start(); 
+        
+        Producer producer2 = new Producer();
+        producer2.setProducer(tokenToProducer, operation);
+        producer2.setSharedObject(sharedObject); 
+        producer2.start(); 
+        
+        Producer producer3 = new Producer();
+        producer3.setProducer(tokenToProducer, operation);
+        producer3.setSharedObject(sharedObject); 
+        producer3.start(); 
+       
+		producer1.join();
+        producer2.join();        
+        producer3.join();
+        
+        sharedVariable = sharedObject.getSharedObject();
+        
+        byte [] sendBuffer = new byte [255];
+        DatagramSocket clockwiseSocket = new DatagramSocket(); 
+        DatagramSocket counterclockwiseSocket = new DatagramSocket();
+        InetAddress serverIP = InetAddress.getLocalHost();
+
+        if (direction == 0) {
+            serverPort = clockwiseSendPort; 
+        } else {
+            serverPort = counterclockwiseSendPort;
+        } 
+  
+        String dataString = Integer.toString(sharedVariable);
+        sendBuffer = dataString.getBytes();
+        DatagramPacket datagram = new DatagramPacket(sendBuffer, sendBuffer.length, serverIP, serverPort);
+
+        if (direction == 0) {
+            clockwiseSocket.send(datagram);
+            clockwiseSocket.close();    
+        } else{
+            counterclockwiseSocket.send(datagram);
+            counterclockwiseSocket.close(); 
+        } 
+        
+        ValiparInitializer.clean(String.valueOf(processId));
+    }}}
+}
+
+import java.nio.file.*;
+import java.nio.charset.Charset;
+import java.io.*;
+import java.util.List;
+import java.nio.ByteBuffer;
+
+public class ValiparInitializer {
+	public static Path FILE_PATH;
+	private static String PORT = "port";
+	private static String SEPARATOR = "_";
+
+	static {
+		 FILE_PATH = Paths.get("/tmp/.server" + System.getenv("VALIPAR_EXECUTION_ID"));
+	}
+	
+	public static void notifyClients() throws IOException {
+        Files.createFile(FILE_PATH);
+	}
+
+	public static void notifyClients(int pid) throws IOException {
+		notifyClients(String.valueOf(pid));
+	}
+
+	public static void notifyClients(String pos) throws IOException {
+		Path path = Paths.get(FILE_PATH.toString() + SEPARATOR + pos);
+        Files.createFile(path);
+	}
+	
+	public static void waitServer() throws IOException {
+		while (!Files.exists(FILE_PATH));
+	}
+
+	public static void waitServer(String pos) throws IOException {
+		Path path = Paths.get(FILE_PATH.toString() + SEPARATOR + pos);
+		while (!Files.exists(path));
+	}
+
+	public static void clean() throws IOException {
+		Files.deleteIfExists(FILE_PATH);
+	}
+
+	public static void clean(String pos) throws IOException {
+		Path path = Paths.get(FILE_PATH.toString() + SEPARATOR + pos);
+		Files.deleteIfExists(path);
+	}
+
+	public static void publishPort(int pid, int port) {
+		Path path = Paths.get(FILE_PATH.toString() + SEPARATOR + pid + SEPARATOR + PORT);
+		 try {
+            PrintWriter out = new PrintWriter(Files.newOutputStream(path), true);
+            out.println(port);
+        } catch (IOException ex) {
+            throw new RuntimeException("VALIPAR: " + path + " could not be openned", ex);
+        }
+	}
+
+	public static int getPort(int pidTarget) {
+		Path path = Paths.get(FILE_PATH.toString() + SEPARATOR + pidTarget + SEPARATOR + PORT);
+		List<String> lines; 
+		try {
+			lines = Files.readAllLines(path, Charset.defaultCharset());
+		} catch (IOException ex) {
+			throw new RuntimeException("VALIPAR: " + path + " could not be openned", ex);
+		}
+		return Integer.parseInt(lines.get(0).trim());
+	}
+	
+    public static ByteBuffer getBuffer(byte[] sendMessage) throws IOException {
+        ByteBuffer buffer = ByteBuffer.allocate(128);
+        buffer.put(sendMessage);
+        buffer.flip();
+        return buffer;
+    }
+}

@@ -2,7 +2,7 @@ from blessings import Terminal
 from openai import OpenAI
 
 client = OpenAI(
-    api_key='insira-sua-chave-aqui'
+    api_key='sk-proj-QMIx8WaoUK3LPny0tztoT3BlbkFJ5hwQa6Hlyew05c9gHKyW'
 )
 
 

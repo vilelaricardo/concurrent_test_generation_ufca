@@ -1,0 +1,292 @@
+public class Buffer_Semaphore {
+    private float sharedValue = 2;
+    
+    // increments the shared variable
+    public void setIncrementSharedValue() {
+        sharedValue++;
+        setDetails();
+    }
+    
+    // multiply the shared variable
+    public void setMultiplySharedValue() {
+        sharedValue = sharedValue * 2;
+        setDetails();
+    }
+
+    // get the shared variable
+    public float getSharedValue() {
+        getDetails();
+        return sharedValue;
+    }
+
+    private void setDetails() {
+        //System.out.println(Thread.currentThread().getName() + " writes semaphore = " + sharedValue);
+        System.out.println(" writes semaphore = " + sharedValue);
+    }
+
+    private void getDetails() {
+        //System.out.println(Thread.currentThread().getName() + " reads semaphore = " + sharedValue);
+        System.out.println(" reads semaphore = " + sharedValue);
+    }
+}
+
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class Buffer_With_Lock_Condition {
+    private float sharedValue = 2;
+    private boolean writeable = false;  // conditional variable
+    
+    public Lock acessLock;
+    public Condition canWrite;
+    public Condition canRead;
+
+    // increments the shared variable
+    public void setIncrementSharedValue() throws InterruptedException {
+        acessLock.lock();
+        while (writeable) {
+            canWrite.await();
+        }
+        sharedValue++;
+        setDetails();
+        writeable = true;
+        canRead.signal();
+        acessLock.unlock();
+    }
+    
+    // multiply the shared variable
+    public void setMultiplySharedValue() throws InterruptedException {
+        acessLock.lock();
+        while (writeable) {
+            canWrite.await();
+        }
+        sharedValue = sharedValue * 2;
+        setDetails();
+        writeable = true;
+        canRead.signal();
+        acessLock.unlock();
+    }
+
+    // get the shared variable
+    public float getSharedValue() throws InterruptedException {
+        acessLock.lock();
+        while (!writeable) {
+            canRead.await();
+        }
+        getDetails();   
+        writeable = false;
+         canWrite.signal();  // Fault - nonexistent signal
+        acessLock.unlock();
+        return sharedValue;
+    }
+    
+    private void setDetails() {
+       // System.out.println ( Thread.currentThread().getName() + " writes lock = " + sharedValue );
+        System.out.println(" writes lock = " + sharedValue );
+    }
+    
+    private void getDetails() {
+        //System.out.println ( Thread.currentThread().getName() + " reads lock = " + sharedValue );
+        System.out.println(" reads lock = " + sharedValue );
+    }
+}
+
+import java.util.concurrent.Semaphore;
+
+public class Consumer extends Thread {
+    private Buffer_Semaphore sharedObject1;
+    private Buffer_With_Lock_Condition sharedObject2;
+    private Semaphore tokenToProducer, tokenToConsumer;
+    private int numberOfIterations;
+    private int path;
+    
+    public void setSemaphoreTokenToConsumer(Semaphore tokenToConsumer){
+    	this.tokenToConsumer = tokenToConsumer;
+    }
+    
+    public void setSemaphoreTokenToProducer(Semaphore tokenToProducer){
+    	this.tokenToProducer = tokenToProducer;
+    }
+    
+    public void setBuffer_Semaphore(Buffer_Semaphore sharedObject1){
+    	this.sharedObject1 = sharedObject1;
+    }
+    
+    public void setBuffer_With_Lock_Condition(Buffer_With_Lock_Condition sharedObject2){
+    	this.sharedObject2 = sharedObject2;
+    }
+    
+    public void setSharedObject(int numberOfIterations, int path) {
+        this.numberOfIterations = numberOfIterations;
+        this.path = path;
+    }
+
+    public void run(){
+        if (path == 0) {
+            for (int i = 0; i < numberOfIterations; i++) {
+                tokenToConsumer.acquireUninterruptibly(); 
+                sharedObject1.getSharedValue();
+                tokenToProducer.release(); 
+            }  
+        } else{
+    		   
+            for (int i = 0; i < numberOfIterations; i++) {
+                //try {
+                    try {
+						sharedObject2.getSharedValue();
+					} catch (InterruptedException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+               
+                //    } catch (InterruptedException e) {}
+            } 
+        }  
+    }
+}
+
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class Main {
+    public static void main(String[] args) throws InterruptedException {
+        int numberOfThreads = 4; // total number of threads
+        int operation = 0; // if 0 increments, if 1 multiply
+        int numberOfIterations = 1; // amount of iterations that each thread make in the shared variable
+        int path = 0; // if 0 -> use buffer with semaphore, if 1 -> use buffer with locks and conditions
+        boolean flag = true;
+
+
+	    numberOfThreads = Integer.parseInt(args[0]);  // fix 4
+            operation = Integer.parseInt(args[1]); // 0 ou 1
+            numberOfIterations = Integer.parseInt(args[2]); // 1+
+            path = Integer.parseInt(args[3]); //0 ou 1 
+
+                if((operation>-1) && (operation<2) && (numberOfIterations>=1) && (numberOfIterations<=10)){
+
+	if(path==0 || path==1){
+
+        
+        Buffer_Semaphore sharedObject1 = new Buffer_Semaphore();
+        Buffer_With_Lock_Condition sharedObject2 = new Buffer_With_Lock_Condition();
+        sharedObject2.acessLock = new ReentrantLock();
+        sharedObject2.canWrite = sharedObject2.acessLock.newCondition();
+        sharedObject2.canRead = sharedObject2.acessLock.newCondition();
+        
+        Semaphore tokenToProducer = new Semaphore(0);
+        tokenToProducer.release();
+        Semaphore tokenToConsumer = new Semaphore(0);
+        
+        Producer producer0 = new Producer();
+        producer0.setSharedObject(operation, numberOfIterations, path);
+        producer0.setBuffer_Semaphore(sharedObject1);
+        producer0.setBuffer_With_Lock_Condition(sharedObject2);
+        producer0.setSemaphoreTokenToConsumer(tokenToConsumer);
+        producer0.setSemaphoreTokenToProducer(tokenToProducer);
+        producer0.start();
+                    
+        Producer producer1 = new Producer();
+        producer1.setSharedObject(operation, numberOfIterations, path);
+        producer1.setBuffer_Semaphore(sharedObject1);
+        producer1.setBuffer_With_Lock_Condition(sharedObject2);
+        producer1.setSemaphoreTokenToConsumer(tokenToConsumer);
+        producer1.setSemaphoreTokenToProducer(tokenToProducer);
+        producer1.start();
+        
+        
+        Consumer consumer0 = new Consumer();
+        consumer0.setSharedObject(numberOfIterations, path);
+        consumer0.setBuffer_Semaphore(sharedObject1);
+        consumer0.setBuffer_With_Lock_Condition(sharedObject2);
+        consumer0.setSemaphoreTokenToConsumer(tokenToConsumer);
+        consumer0.setSemaphoreTokenToProducer(tokenToProducer);
+        consumer0.start();
+        
+        Consumer consumer1 = new Consumer();
+        consumer1.setSharedObject(numberOfIterations, path);
+        consumer1.setBuffer_Semaphore(sharedObject1);
+        consumer1.setBuffer_With_Lock_Condition(sharedObject2);
+        consumer1.setSemaphoreTokenToConsumer(tokenToConsumer);
+        consumer1.setSemaphoreTokenToProducer(tokenToProducer);
+        consumer1.start();
+        
+        
+        producer0.join();
+        consumer0.join();
+        
+        producer1.join();
+        consumer1.join();
+    }}
+}
+}
+
+import java.util.concurrent.Semaphore;
+
+public class Producer extends Thread {
+    private Buffer_Semaphore sharedObject1;
+    private Buffer_With_Lock_Condition sharedObject2;
+    private Semaphore tokenToProducer, tokenToConsumer;
+    private int numberOfIterations;
+    private int operation;
+    private int path;
+
+    public void setSemaphoreTokenToConsumer(Semaphore tokenToConsumer){
+    	this.tokenToConsumer = tokenToConsumer;
+    }
+    
+    public void setSemaphoreTokenToProducer(Semaphore tokenToProducer){
+    	this.tokenToProducer = tokenToProducer;
+    }
+    
+    public void setBuffer_Semaphore(Buffer_Semaphore sharedObject1){
+    	this.sharedObject1 = sharedObject1;
+    }
+    
+    public void setBuffer_With_Lock_Condition(Buffer_With_Lock_Condition sharedObject2){
+    	this.sharedObject2 = sharedObject2;
+    }
+    
+    public void setSharedObject(int operation, int numberOfIterations, int path) {
+        this.operation = operation;
+        this.numberOfIterations = numberOfIterations;
+        this.path = path;
+    }
+
+    public void run() {
+        if (path == 0) {
+            if (operation == 0) {
+                for (int i = 0; i < numberOfIterations; i++) {
+                    tokenToProducer.acquireUninterruptibly(); 
+                    sharedObject1.setIncrementSharedValue();
+                    tokenToConsumer.release();
+                }
+            }
+            if (operation == 1) {
+                for (int i = 0; i < numberOfIterations; i++) {
+                    tokenToProducer.acquireUninterruptibly(); 
+                    sharedObject1.setMultiplySharedValue();
+                    tokenToConsumer.release();
+                }
+            }
+        }
+       	  else{
+            if (operation == 0) {
+                for (int i = 0; i < numberOfIterations; i++) {
+                    try {
+                        sharedObject2.setIncrementSharedValue();
+                    } catch (Exception e) {}
+                }
+            }
+            else{
+                for (int i = 0; i < numberOfIterations; i++) {
+                    try {
+                        sharedObject2.setMultiplySharedValue();
+                    } catch (Exception e) {}
+                }
+            }   
+        }  
+    }
+}
