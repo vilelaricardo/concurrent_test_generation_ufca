@@ -1,0 +1,747 @@
+public class Buffer {
+    public int gcdResult;
+    public int lcmResult;
+    public int totalAmountOfComputation;
+}
+
+import java.io.IOException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+
+public class GcdLcmMaster {
+    public static void main(String[] args) throws IOException {
+        int lcm;
+        int method = 0; // 0 to GCD (Parallel), 1 to LCM (Parallel), 2 to GCD + LCM (Parallel and Shared Memory)
+        final int ZERO = 0;
+        int fstValue = 50; //first value
+        int sndValue = 100; //second value
+        int trdValue = 10; //third value
+        int recvValueOfProc1 = 0;
+        int recvValueOfProc2 = 0;
+        int recvValueOfProc3 = 0;
+        String data1; // results
+        String data2; // results
+        String values;
+
+   
+            method = Integer.parseInt(args[0]);
+            fstValue = Integer.parseInt(args[1]);
+            sndValue = Integer.parseInt(args[2]);
+            trdValue = Integer.parseInt(args[3]);
+   
+	if((fstValue>0) && (sndValue>0) && (trdValue>0)){ 
+	if((method>=0) && (method<=2)){
+	
+        
+        // create socket
+        DatagramSocket socket = new DatagramSocket();
+        int port = socket.getLocalPort();
+        InetAddress addressIP = InetAddress.getLocalHost();
+        String ip = addressIP.getHostAddress();
+
+        // make address file with IP:PORT
+        String address = HelperClass.makeAddress(ip, port);
+        HelperClass.makeAddressFile(0, address);
+
+        // wait slaves
+        if (method == 0 || method == 1) {
+            HelperClass.waitSlaves1();
+        } else {
+            HelperClass.waitSlaves2();
+        }
+
+        // get remote IP and PORT of the slave 1
+        String hostIP = HelperClass.readRemoteIP(1);
+        InetAddress remoteIP1 = InetAddress.getByName(hostIP);
+        int remotePort1 = HelperClass.readRemotePort(1);
+
+        // get remote IP and PORT of the slave 2
+        hostIP = HelperClass.readRemoteIP(2);
+        InetAddress remoteIP2 = InetAddress.getByName(hostIP);
+        int remotePort2 = HelperClass.readRemotePort(2);
+
+        if (method == 0 || method == 1) {
+            // send values to the slave 1
+            values = HelperClass.makeMessage1(method, fstValue, sndValue);
+            sendValueToSlave(socket, values, remoteIP1, remotePort1);
+
+            // send values to the slave 2
+            values = HelperClass.makeMessage1(method, sndValue, trdValue);
+            sendValueToSlave(socket, values, remoteIP2, remotePort2);
+        } 
+        if (method == 2) {
+            // send values to the slave 1
+            values = HelperClass.makeMessage2(method, fstValue, sndValue, trdValue);
+            sendValueToSlave(socket, values, remoteIP1, remotePort1);
+
+            // send values to the slave 2
+            sendValueToSlave(socket, values, remoteIP2, remotePort2);
+        }
+        
+        byte[] receiveBuffer = new byte[255];
+        byte[] receiveBuffer2 = new byte[255];
+        DatagramPacket receivePacket = new DatagramPacket(receiveBuffer, receiveBuffer.length);
+        DatagramPacket receivePacket2 = new DatagramPacket(receiveBuffer2, receiveBuffer2.length);        
+        
+        for (int i = 1; i <= 2; i++) {
+            if (i == 1) {
+                socket.receive(receivePacket);
+                data1 = new String(receivePacket.getData());
+                if (method == 0 || method == 1) {
+                    recvValueOfProc1 = (Integer.parseInt(data1.trim()));
+                }
+                if (method == 2) {
+                    System.out.println(data1);
+                }
+
+            } else {
+                socket.receive(receivePacket2);
+                data2 = new String(receivePacket2.getData());
+                if (method == 0 || method == 1) {
+                    recvValueOfProc2 = (Integer.parseInt(data2.trim()));
+                }
+                if (method == 2) {
+                    System.out.println(data2);
+                }
+            }
+        }
+        
+        // set values with zero to finish the slave 3
+        values = HelperClass.makeMessage1(method, ZERO, ZERO);
+
+        if (method == 0) { // GCD
+            // get remote IP and PORT of the slave 3
+            hostIP = HelperClass.readRemoteIP(3);
+            InetAddress remoteIP3 = InetAddress.getByName(hostIP);
+            int remotePort3 = HelperClass.readRemotePort(3);
+        
+            if (recvValueOfProc1 == 1 || recvValueOfProc2 == 1) {
+                System.out.println("gcd(" + fstValue + ", " + sndValue + ", " + trdValue + ") = " + 1);
+                // send values to the slave 3
+                sendValueToSlave(socket, values, remoteIP3, remotePort3);
+            } else {
+                values = HelperClass.makeMessage1(method, recvValueOfProc1, recvValueOfProc2);
+                // send values to the slave 3
+                sendValueToSlave(socket, values, remoteIP3, remotePort3);
+                socket.receive(receivePacket);
+                data1 = new String(receivePacket.getData());
+                recvValueOfProc3 = (Integer.parseInt(data1.trim()));
+                System.out.println("gcd(" + fstValue + ", " + sndValue + ", " + trdValue + ") = " + recvValueOfProc3);
+            }
+        }
+        if (method == 1) { // LCM
+             // get remote IP and PORT of the slave 3
+             hostIP = HelperClass.readRemoteIP(3);
+             InetAddress remoteIP3 = InetAddress.getByName(hostIP);
+             int remotePort3 = HelperClass.readRemotePort(3);
+             
+            if (recvValueOfProc1 == recvValueOfProc2 || recvValueOfProc2 == 1) {                
+                lcm = recvValueOfProc1;
+                System.out.println("lcm(" + fstValue + ", " + sndValue + ", " + trdValue + ") = " + lcm);
+                // send values to the slave 3
+                sendValueToSlave(socket, values, remoteIP3, remotePort3);
+            }
+            if (recvValueOfProc1 == 1) {                
+                lcm = recvValueOfProc2;
+                System.out.println("lcm(" + fstValue + ", " + sndValue + ", " + trdValue + ") = " + lcm);
+                // send values to the slave 3
+                sendValueToSlave(socket, values, remoteIP3, remotePort3);
+            } else {
+                values = HelperClass.makeMessage1(method, recvValueOfProc1, recvValueOfProc2);
+                // send values to the slave 3
+                sendValueToSlave(socket, values, remoteIP3, remotePort3);
+                socket.receive(receivePacket);
+                data1 = new String(receivePacket.getData());
+                recvValueOfProc3 = (Integer.parseInt(data1.trim()));
+                System.out.println("lcm(" + fstValue + ", " + sndValue + ", " + trdValue + ") = " + recvValueOfProc3);
+            }
+        } 
+        
+        if (method == 0 || method == 1) {
+            HelperClass.closeFiles1();
+        } else {
+            HelperClass.closeFiles2();
+        } 
+        } else{
+        	
+        
+           
+         if (method!=2){
+
+	method = -1; fstValue= -1; sndValue = -1;
+        	
+       	 DatagramSocket socket = new DatagramSocket();
+           int port = socket.getLocalPort();
+           InetAddress addressIP = InetAddress.getLocalHost();
+           String ip = addressIP.getHostAddress();
+
+           // make address file with IP:PORT
+           String address = HelperClass.makeAddress(ip, port);
+           HelperClass.makeAddressFile(0, address);  
+       	  
+       	  	HelperClass.waitSlaves1();
+       	    // get remote IP and PORT of the slave 1
+       	    String hostIP = HelperClass.readRemoteIP(1);
+       	    InetAddress remoteIP1 = InetAddress.getByName(hostIP);
+       	    int remotePort1 = HelperClass.readRemotePort(1);
+
+       	    // get remote IP and PORT of the slave 2
+       	    hostIP = HelperClass.readRemoteIP(2);
+       	    InetAddress remoteIP2 = InetAddress.getByName(hostIP);
+       	    int remotePort2 = HelperClass.readRemotePort(2);
+       	    
+       	    // get remote IP and PORT of the slave 3
+       	    hostIP = HelperClass.readRemoteIP(3);
+       	    InetAddress remoteIP3 = InetAddress.getByName(hostIP);
+       	    int remotePort3 = HelperClass.readRemotePort(3);
+       	  
+           // send values to the slave 1
+           values = HelperClass.makeMessage1(method, fstValue, sndValue);
+           sendValueToSlave(socket, values, remoteIP1, remotePort1);
+
+           // send values to the slave 2
+           values = HelperClass.makeMessage1(method, fstValue, sndValue);
+           sendValueToSlave(socket, values, remoteIP2, remotePort2);
+         
+           // send values to the slave 3
+           values = HelperClass.makeMessage1(method, fstValue, sndValue);
+           sendValueToSlave(socket, values, remoteIP3, remotePort3);
+           
+           HelperClass.closeFiles1();
+       } else
+           {
+
+	method = -1; fstValue= -1; sndValue = -1;
+        	
+       	 DatagramSocket socket = new DatagramSocket();
+           int port = socket.getLocalPort();
+           InetAddress addressIP = InetAddress.getLocalHost();
+           String ip = addressIP.getHostAddress();
+
+           // make address file with IP:PORT
+           String address = HelperClass.makeAddress(ip, port);
+           HelperClass.makeAddressFile(0, address);
+	
+       	HelperClass.waitSlaves2();
+           // get remote IP and PORT of the slave 1
+           String hostIP = HelperClass.readRemoteIP(1);
+           InetAddress remoteIP1 = InetAddress.getByName(hostIP);
+           int remotePort1 = HelperClass.readRemotePort(1);
+
+           // get remote IP and PORT of the slave 2
+           hostIP = HelperClass.readRemoteIP(2);
+           InetAddress remoteIP2 = InetAddress.getByName(hostIP);
+           int remotePort2 = HelperClass.readRemotePort(2);
+       	
+           		// send values to the slave 1
+           	 	values = HelperClass.makeMessage1(method, fstValue, sndValue);
+           	    sendValueToSlave(socket, values, remoteIP1, remotePort1);
+
+           	    // send values to the slave 2
+           	    values = HelperClass.makeMessage1(method, fstValue, sndValue);
+           	    sendValueToSlave(socket, values, remoteIP2, remotePort2);
+           	    
+           	    HelperClass.closeFiles2();
+           	
+           }
+
+
+}
+
+
+
+
+}else {
+	
+	
+    
+  if (method!=2){  
+
+	method = -1; fstValue= -1; sndValue = -1;
+	
+	 DatagramSocket socket = new DatagramSocket();
+    int port = socket.getLocalPort();
+    InetAddress addressIP = InetAddress.getLocalHost();
+    String ip = addressIP.getHostAddress();
+
+    // make address file with IP:PORT
+    String address = HelperClass.makeAddress(ip, port);
+    HelperClass.makeAddressFile(0, address);
+	  
+	  	HelperClass.waitSlaves1();
+	    // get remote IP and PORT of the slave 1
+	    String hostIP = HelperClass.readRemoteIP(1);
+	    InetAddress remoteIP1 = InetAddress.getByName(hostIP);
+	    int remotePort1 = HelperClass.readRemotePort(1);
+
+	    // get remote IP and PORT of the slave 2
+	    hostIP = HelperClass.readRemoteIP(2);
+	    InetAddress remoteIP2 = InetAddress.getByName(hostIP);
+	    int remotePort2 = HelperClass.readRemotePort(2);
+	    
+	    // get remote IP and PORT of the slave 3
+	    hostIP = HelperClass.readRemoteIP(3);
+	    InetAddress remoteIP3 = InetAddress.getByName(hostIP);
+	    int remotePort3 = HelperClass.readRemotePort(3);
+	  
+    // send values to the slave 1
+    values = HelperClass.makeMessage1(method, fstValue, sndValue);
+    sendValueToSlave(socket, values, remoteIP1, remotePort1);
+
+    // send values to the slave 2
+    values = HelperClass.makeMessage1(method, fstValue, sndValue);
+    sendValueToSlave(socket, values, remoteIP2, remotePort2);
+  
+    // send values to the slave 3
+    values = HelperClass.makeMessage1(method, fstValue, sndValue);
+    sendValueToSlave(socket, values, remoteIP3, remotePort3);
+    
+    HelperClass.closeFiles1();
+} else
+    {
+
+method = -1; fstValue= -1; sndValue = -1;
+	
+	 DatagramSocket socket = new DatagramSocket();
+    int port = socket.getLocalPort();
+    InetAddress addressIP = InetAddress.getLocalHost();
+    String ip = addressIP.getHostAddress();
+
+    // make address file with IP:PORT
+    String address = HelperClass.makeAddress(ip, port);
+    HelperClass.makeAddressFile(0, address);
+	HelperClass.waitSlaves2();
+    // get remote IP and PORT of the slave 1
+    String hostIP = HelperClass.readRemoteIP(1);
+    InetAddress remoteIP1 = InetAddress.getByName(hostIP);
+    int remotePort1 = HelperClass.readRemotePort(1);
+
+    // get remote IP and PORT of the slave 2
+    hostIP = HelperClass.readRemoteIP(2);
+    InetAddress remoteIP2 = InetAddress.getByName(hostIP);
+    int remotePort2 = HelperClass.readRemotePort(2);
+	
+    		// send values to the slave 1
+    	 	values = HelperClass.makeMessage1(method, fstValue, sndValue);
+    	    sendValueToSlave(socket, values, remoteIP1, remotePort1);
+
+    	    // send values to the slave 2
+    	    values = HelperClass.makeMessage1(method, fstValue, sndValue);
+    	    sendValueToSlave(socket, values, remoteIP2, remotePort2);
+    	    
+    	    HelperClass.closeFiles2();
+    	
+    }
+
+  
+
+
+}
+    }
+
+    // send method
+    private static void sendValueToSlave(DatagramSocket socket, String values, 
+                                            InetAddress remoteIP, int remotePort) throws IOException {
+        byte[] sendBuffer = new byte[255];
+        sendBuffer = values.toString().getBytes();
+        DatagramPacket datagram = new DatagramPacket(sendBuffer, sendBuffer.length, remoteIP, remotePort);
+        socket.send(datagram);
+    }
+}
+
+import java.net.*;
+import java.io.*;
+
+public class GcdLcmSlave {
+    public static void main(String[] args) throws IOException {
+        int processId = 0;
+        int lcm = 0;
+        int method = 0;
+        int fstValueSlave = -1;
+        int sndValueSlave = -1;
+        int trdValueSlave = -1;
+        int gcdPartialResult1 = -1;
+        int gcdPartialResult2 = -1;
+        int gcdFinalResult = -1;
+        int lcmPartialResult1 = -1;
+        int lcmPartialResult2 = -1;
+        int lcmFinalResult = -1;
+
+
+            processId = Integer.parseInt(args[0]);
+     
+
+        // create socket
+        DatagramSocket socket = new DatagramSocket();
+        int port = socket.getLocalPort();
+        InetAddress addressIP = InetAddress.getLocalHost();
+        String ip = addressIP.getHostAddress();
+
+        // make address file with IP:PORT
+        String address = HelperClass.makeAddress(ip, port);
+        HelperClass.makeAddressFile(processId, address);
+
+        // wait master
+        HelperClass.waitMaster();
+
+        // get remote IP and PORT of the master process
+        String hostIP = HelperClass.readRemoteIP(0);
+        InetAddress remoteIP = InetAddress.getByName(hostIP);
+        int remotePort = HelperClass.readRemotePort(0);
+
+        byte[] receiveBuffer = new byte[255];
+        DatagramPacket receivePacket = new DatagramPacket(receiveBuffer, receiveBuffer.length);
+        socket.receive(receivePacket);
+
+        String[] result = new String(receivePacket.getData()).trim().split(",");
+        method = Integer.parseInt(result[0]);
+        fstValueSlave = Integer.parseInt(result[1]);
+        sndValueSlave = Integer.parseInt(result[2]);
+        
+        if(!(method == -1)){
+
+        if (method == 0) { // GCD
+            gcd(socket, fstValueSlave, sndValueSlave, remoteIP, remotePort);
+        }
+        if (method == 1) { // LCM
+            lcm(socket, fstValueSlave, sndValueSlave, lcm, remoteIP, remotePort);
+        }
+        if (method == 2) { // GCD and LCM
+   	    trdValueSlave = Integer.parseInt(result[3]);
+            Buffer sharedObject = new Buffer();
+            sharedObject.gcdResult = gcdPartialResult1;
+            sharedObject.lcmResult = lcmPartialResult1;
+
+            GcdThread gcdThread_0 = new GcdThread();
+            GcdThread gcdThread_1 = new GcdThread();
+            GcdThread gcdThread_2 = new GcdThread();
+            
+            LcmThread lcmThread_0 = new LcmThread();
+            LcmThread lcmThread_1 = new LcmThread();
+            LcmThread lcmThread_2 = new LcmThread();
+
+            if (processId == 1) {
+                try {
+                    gcdThread_0.setGcdThread(sharedObject, fstValueSlave, sndValueSlave);
+                    gcdThread_0.start();
+                    gcdThread_0.join();
+                    
+                    gcdPartialResult1 = sharedObject.gcdResult;
+                    System.out.println("gcd(" + fstValueSlave + ", " + sndValueSlave + ") = " + gcdPartialResult1);
+                    
+                    gcdThread_1.setGcdThread(sharedObject, sndValueSlave, trdValueSlave);
+                    gcdThread_1.start();
+                    gcdThread_1.join();
+                    
+                    gcdPartialResult2 = sharedObject.gcdResult;
+                    System.out.println("gcd(" + sndValueSlave + ", " + trdValueSlave + ") = " + gcdPartialResult2);
+                    
+                    String fstValueSlaveString = Integer.toString(fstValueSlave);
+                    String sndValueSlaveString = Integer.toString(sndValueSlave);
+                    String trdValueSlaveString = Integer.toString(trdValueSlave);
+                    String gcdPartialResult1String = Integer.toString(gcdPartialResult1);
+                    String gcdPartialResult2String = Integer.toString(gcdPartialResult2);
+
+                    if (gcdPartialResult1 == 1 || gcdPartialResult2 == 1) {
+                        System.out.println("gcd(" + gcdPartialResult1String + ", " + gcdPartialResult2String + ") = " + 1);
+
+                        sendStringToMaster(socket, "gcd(" + fstValueSlaveString + ", " + sndValueSlaveString + ", "
+                                + trdValueSlaveString + ") = " + 1, remoteIP, remotePort);
+
+                    } else {
+                        gcdThread_2.setGcdThread(sharedObject, gcdPartialResult1, gcdPartialResult2);
+                        gcdThread_2.start();
+                        gcdThread_2.join();
+                        
+                        
+                        gcdFinalResult = sharedObject.gcdResult;
+
+                        System.out.println("gcd(" + gcdPartialResult1String + ", " + gcdPartialResult2String + ") = " + gcdFinalResult);
+
+                        sendStringToMaster(socket, "gcd(" + fstValueSlaveString + ", " + sndValueSlaveString + ", "
+                                + trdValueSlaveString + ") = " + gcdFinalResult, remoteIP, remotePort);
+
+                    }
+                    
+                    int computation1 = sharedObject.totalAmountOfComputation;    
+                    System.out.println("computation: " + computation1);
+                    
+                } catch (InterruptedException e) {}
+            }
+            if (processId == 2) {
+                try {
+                    lcmThread_0.setLcmThread(sharedObject, fstValueSlave, sndValueSlave);
+                    lcmThread_0.start();
+                    lcmThread_0.join();
+                    
+                    lcmPartialResult1 = sharedObject.lcmResult;
+                    System.out.println("lcm(" + fstValueSlave + ", " + sndValueSlave + ") = " + lcmPartialResult1);
+                    
+                    lcmThread_1.setLcmThread(sharedObject, sndValueSlave, trdValueSlave);
+                    lcmThread_1.start();
+                    lcmThread_1.join();
+                    
+                    lcmPartialResult2 = sharedObject.lcmResult;
+                    System.out.println("lcm(" + sndValueSlave + ", " + trdValueSlave + ") = " + lcmPartialResult2);
+                    
+                    lcmThread_2.setLcmThread(sharedObject, lcmPartialResult1, lcmPartialResult2);
+                    lcmThread_2.start();
+                    lcmThread_2.join();
+                    lcmFinalResult = sharedObject.lcmResult;
+
+                    String fstValueSlaveString = Integer.toString(fstValueSlave);
+                    String sndValueSlaveString = Integer.toString(sndValueSlave);
+                    String trdValueSlaveString = Integer.toString(trdValueSlave);
+                    String lcmPartialResult1String = Integer.toString(lcmPartialResult1);
+                    String lcmPartialResult2String = Integer.toString(lcmPartialResult2);
+
+                    System.out.println("lcm(" + lcmPartialResult1String + ", " + lcmPartialResult2String + ") = " + lcmFinalResult);
+
+                    sendStringToMaster(socket, "lcm(" + fstValueSlaveString + ", " + sndValueSlaveString + ", "
+                            + trdValueSlaveString + ") = " + lcmFinalResult, remoteIP, remotePort);
+                            
+                    int computation2 = sharedObject.totalAmountOfComputation;    
+                    System.out.println("computation: " + computation2); 
+
+                } catch (InterruptedException e) {}
+            }
+        }}
+    }
+
+    private static void gcd(DatagramSocket socket, int fstValueSlave, int sndValueSlave, InetAddress remoteIP, int remotePort) throws IOException {
+        if (fstValueSlave == 0 && sndValueSlave == 0) {
+            // this process is finalized;
+            System.exit(0);
+        } else {
+            // otherwise, calculates the GCD
+            int tempfstValueSlave = fstValueSlave, tempsndValueSlave = sndValueSlave;
+            while (tempfstValueSlave != tempsndValueSlave) {
+                if (tempfstValueSlave < tempsndValueSlave) {
+                    tempsndValueSlave = tempsndValueSlave - tempfstValueSlave;
+                } else {
+                    tempfstValueSlave = tempfstValueSlave - tempsndValueSlave;
+                }
+            }
+            System.out.println("gcd(" + fstValueSlave + ", " + sndValueSlave + ") = " + tempfstValueSlave);
+            sendValueToMaster(socket, tempfstValueSlave, remoteIP, remotePort);
+        }
+    }
+
+    private static void lcm(DatagramSocket socket, int fstValueSlave, int sndValueSlave, int lcm, InetAddress remoteIP, int remotePort)
+            throws IOException {
+        if (fstValueSlave == sndValueSlave || sndValueSlave == 1) {
+        }
+        if (fstValueSlave == 1) {
+            lcm = sndValueSlave;
+        } else {
+            lcm = 0;
+        }
+
+        if (lcm == 0) {
+            int tempfstValueSlave = fstValueSlave, tempsndValueSlave = sndValueSlave;
+            while (tempfstValueSlave != tempsndValueSlave) {
+                while (tempfstValueSlave < tempsndValueSlave) {
+                    tempfstValueSlave += fstValueSlave;
+                }
+                while (tempsndValueSlave < tempfstValueSlave) {
+                    tempsndValueSlave += sndValueSlave;
+                }
+            }
+            lcm = tempfstValueSlave;
+        }
+        System.out.println("lcm(" + fstValueSlave + ", " + sndValueSlave + ") = " + lcm);
+        sendValueToMaster(socket, lcm, remoteIP, remotePort);
+    }
+
+    private static void sendValueToMaster(DatagramSocket socket, int value, InetAddress remoteIP, int remotePort) throws IOException {
+        byte[] sendBuffer = new byte[255];
+        String dataString = Integer.toString(value);
+        sendBuffer = dataString.getBytes();
+        DatagramPacket datagram = new DatagramPacket(sendBuffer, sendBuffer.length, remoteIP, remotePort);
+        socket.send(datagram);
+    }
+
+    private static void sendStringToMaster(DatagramSocket socket, String value, InetAddress remoteIP, int remotePort) throws IOException {
+        byte[] sendBuffer = new byte[255];
+        sendBuffer = value.getBytes();
+        DatagramPacket datagram = new DatagramPacket(sendBuffer, sendBuffer.length, remoteIP, remotePort);
+        socket.send(datagram);
+    }
+}
+
+import java.util.concurrent.Semaphore;
+
+public class GcdThread extends Thread {
+    private Buffer sharedObject;
+    int firstValueSlave;
+    int secondValueSlave;
+
+    public void setGcdThread(Buffer sharedObject, int firstValueSlave, int secondValueSlave) {
+        this.sharedObject = sharedObject;
+        this.firstValueSlave = firstValueSlave;
+        this.secondValueSlave = secondValueSlave;
+    }
+
+    public void run() {
+        try {
+            sleep(10);
+        } catch (InterruptedException e) {}
+
+        while (firstValueSlave != secondValueSlave) {
+            if (firstValueSlave < secondValueSlave) {
+                secondValueSlave = secondValueSlave - firstValueSlave;
+            } else {
+                firstValueSlave = firstValueSlave - secondValueSlave;
+            }
+            sharedObject.totalAmountOfComputation++;
+        }
+        sharedObject.gcdResult = firstValueSlave;
+    }
+}
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+
+public class HelperClass {
+    public static String makeAddress(String ip, int port) {
+        StringBuilder builder = new StringBuilder();
+        builder.append(ip).append(":").append(port);
+        String address = builder.toString();
+        return address;
+    }
+
+    public static void makeAddressFile(int processId, String address) throws IOException {
+        FileWriter ownFile = new FileWriter("parallel_gcd_lcm" + processId + ".txt");
+        PrintWriter writeFile = new PrintWriter(ownFile);
+        writeFile.printf(address);
+        ownFile.close();
+    }
+
+    public static void waitMaster() {
+        while (!Files.exists(Paths.get("parallel_gcd_lcm0.txt")));
+    }
+
+    public static void waitSlaves1() {
+        while (!Files.exists(Paths.get("parallel_gcd_lcm1.txt")));
+        while (!Files.exists(Paths.get("parallel_gcd_lcm2.txt")));
+        while (!Files.exists(Paths.get("parallel_gcd_lcm3.txt")));
+    }
+    
+    public static void waitSlaves2() {
+        while (!Files.exists(Paths.get("parallel_gcd_lcm1.txt")));
+        while (!Files.exists(Paths.get("parallel_gcd_lcm2.txt")));
+    }
+
+    public static String readRemoteIP(int slaveId) throws IOException {
+        FileReader file = new FileReader("parallel_gcd_lcm" + slaveId + ".txt");
+        BufferedReader br = new BufferedReader(file);
+        String fileContent;
+        while ((fileContent = br.readLine()) == null) {}
+        String[] remoteAddress = new String(fileContent).split(":");
+        String hostIP = remoteAddress[0];
+        file.close();
+        return hostIP;
+    }
+
+    public static int readRemotePort(int slaveId) throws IOException {
+        FileReader file = new FileReader("parallel_gcd_lcm" + slaveId + ".txt");
+        BufferedReader br = new BufferedReader(file);
+        String fileContent;
+        while ((fileContent = br.readLine()) == null) {}
+        String[] remoteAddress = new String(fileContent).split(":");
+        int remotePort = Integer.parseInt(remoteAddress[1]);
+        file.close();
+        return remotePort;
+    }
+
+    public static String makeMessage1(int method, int value1, int value2) {
+        StringBuilder builder = new StringBuilder();
+        builder.append(method).append(",").append(value1).append(",").append(value2);
+        String address = builder.toString();
+        return address;
+    }
+    
+    public static String makeMessage2(int method, int value1, int value2, int value3) {
+        StringBuilder builder = new StringBuilder();
+        builder.append(method).append(",").append(value1).append(",").append(value2).append(",").append(value3);
+        String address = builder.toString();
+        return address;
+    }
+
+    public static void closeFiles1() {
+        new File("parallel_gcd_lcm0.txt").delete();
+        for (int i = 1; i <= 3; i++) {
+            new File("parallel_gcd_lcm" + i + ".txt").delete();
+            new File("slave" + i).delete();
+        }
+    }
+    
+    public static void closeFiles2() {
+        new File("parallel_gcd_lcm0.txt").delete();
+        for (int i = 1; i <= 2; i++) {
+            new File("parallel_gcd_lcm" + i + ".txt").delete();
+            new File("slave" + i).delete();
+        }
+    }
+}
+
+import java.util.concurrent.Semaphore;
+
+public class LcmThread extends Thread {
+    private Buffer sharedObject;
+    int firstValueSlave;
+    int secondValueSlave;
+    int lcm;
+
+    public void setLcmThread(Buffer sharedObject, int firstValueSlave, int secondValueSlave) {
+        this.sharedObject = sharedObject;
+        this.firstValueSlave = firstValueSlave;
+        this.secondValueSlave = secondValueSlave;
+    }
+
+    public void run() {
+        try {
+            sleep(10);
+        } catch (InterruptedException e) {}
+
+        if (firstValueSlave == secondValueSlave) {
+            lcm = firstValueSlave;
+            sharedObject.lcmResult = lcm;
+        }
+        
+        if (secondValueSlave == 1) {
+            lcm = firstValueSlave;
+            sharedObject.lcmResult = lcm;
+        }
+        
+        if (firstValueSlave == 1) {
+            lcm = secondValueSlave;
+            sharedObject.lcmResult = lcm;
+        } else {
+            lcm = 0;
+        }
+
+        if (lcm == 0) {
+            int tempFirstValueSlave = firstValueSlave, tempSecondValueSlave = secondValueSlave;
+            while (tempFirstValueSlave != tempSecondValueSlave) {
+                while (tempFirstValueSlave < tempSecondValueSlave) {
+                    tempFirstValueSlave += firstValueSlave;
+                    sharedObject.totalAmountOfComputation++;
+                }
+                while (tempSecondValueSlave < tempFirstValueSlave) {
+                    tempSecondValueSlave += secondValueSlave;
+                    sharedObject.totalAmountOfComputation++;
+                }
+            }
+            lcm = tempFirstValueSlave;
+            sharedObject.lcmResult = lcm;
+        }
+    }
+}
